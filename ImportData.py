@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Oct 15 14:28:47 2023
+Main line driver for importing visitor data
 
 @author: pfox
 """

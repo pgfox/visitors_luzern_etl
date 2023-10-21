@@ -1,26 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Oct  9 16:52:22 2023
+Modules fetches data from Visitors API and weather API and saves the data
+to the DB.
 
 @author: pfox
 """
 
-import requests
+
 import pandas as pd
-from pandas import json_normalize
-import sched, time
+import time
 from pathlib import Path
 from datetime import datetime  
-import sqlalchemy as sa
-from sqlalchemy import create_engine
-from sqlalchemy import insert
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy import DateTime
-import pandas as pd
-
-from sqlalchemy import MetaData
-from sqlalchemy import Integer, String, Column, Table
 from visitor_freqency.DBUtils import DBHelper
 from visitor_freqency.APIUtils import WeatherHelper
 from visitor_freqency.APIUtils import VisitorHelper
@@ -28,16 +19,27 @@ from visitor_freqency.APIUtils import VisitorHelper
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
+
 LOG = logging.getLogger("visitors-logger")
+fh = logging.FileHandler('logs/visitor_data_import_db.log')
+fh.setLevel(logging.INFO)
+
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+ch.setFormatter(formatter)
+
+LOG.addHandler(ch)
+LOG.addHandler(fh)
 
 
-
-DATABASE_URI = 'postgresql+psycopg2://postgres:password@localhost:5432/visitor_luzern'
-pd.set_option('display.max_columns', None)
-
-
-
-def write_csv_file(df : pd.DataFrame,location:str):
+def _write_csv_file(df : pd.DataFrame,location:str):
+    '''
+    write dataframe to a CSV file
+    '''
     now = datetime.now()
     dt_string = now.strftime("%d_%m_%Y_%H_%M")
     filepath = Path(location+'_'+dt_string+'.csv')  
@@ -45,7 +47,10 @@ def write_csv_file(df : pd.DataFrame,location:str):
     df.to_csv(filepath,index=False)
 
 
-def add_weather_data(raw_visitor_df,weather_df):
+def _add_weather_data(raw_visitor_df,weather_df):
+    '''
+    add weather data to visitor data
+    '''
     augmented_df = raw_visitor_df.copy()
     augmented_df['temperature'] = weather_df.loc[0,'temperature']
     augmented_df['windspeed'] = weather_df.loc[0,'windspeed']
@@ -54,17 +59,20 @@ def add_weather_data(raw_visitor_df,weather_df):
     return augmented_df
 
      
-def fetch_data(weather_helper : WeatherHelper , visitior_helper : VisitorHelper):
-    #get data from API
+def _fetch_data(weather_helper : WeatherHelper , visitior_helper : VisitorHelper):
+    '''
+    fetch from Visitor API and weather API . Return dataframe with combined data
+    '''
+    
     raw_visitor_df = visitior_helper.invoke_visitor_api()
     #save raw file
-    write_csv_file(raw_visitor_df,'./data/archive/raw/visitor_df')
+    _write_csv_file(raw_visitor_df,'./data/archive/raw/visitor_df')
     
     #get current weather
     weather_df = weather_helper.invoke_weather_api()
     
     #add to visitor data
-    augmented_df = add_weather_data(raw_visitor_df,weather_df)
+    augmented_df = _add_weather_data(raw_visitor_df,weather_df)
     
     augmented_df['weather_desc'] = weather_helper.get_weather_desc(augmented_df.loc[0,'weather_code'])
 
@@ -74,29 +82,36 @@ def fetch_data(weather_helper : WeatherHelper , visitior_helper : VisitorHelper)
     augmented_df['rtl'] = augmented_df['rtl'].fillna(0)
     
     #write augmented data 
-    write_csv_file(augmented_df,'./data/archive/augmented/visitor_df')
+    _write_csv_file(augmented_df,'./data/archive/augmented/visitor_df')
     
-    #TODO add lattitude and longitude 
+   
     return augmented_df
 
 
 def import_data():
-    LOG.info('Starting RUN...')
+    '''
+    a loop to fetch data from the API and then sleep for 12 minutess
+
+    '''
+    
+    LOG.info('Starting import_data() operation.')
     db_helper = DBHelper()
     weather_helper = WeatherHelper()
     visitior_helper = VisitorHelper()
     
     
     while True:
-        logging.info(f'Fetching data as {datetime.now()}')    
-        df = fetch_data(weather_helper,visitior_helper)    
+        LOG.info('Running fetch and insert iteration')    
+        df = _fetch_data(weather_helper,visitior_helper)    
         
         #log data
-        LOG.info(df)
+        LOG.debug(df)
         
         #insert data
         db_helper.insert_data(df)
         
         #update star schema
         db_helper.update_star()
-        time.sleep((60*12))
+        the_pause = 60*12
+        LOG.info(f'sleeping for {(the_pause/60)} minutes') 
+        time.sleep(the_pause)

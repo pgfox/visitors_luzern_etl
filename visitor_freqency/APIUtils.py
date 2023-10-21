@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Oct 13 15:21:58 2023
+APIUtils is used to interact with APIs (Visitor API and Weather API)
 
 @author: pfox
 """
@@ -10,6 +10,7 @@ from pandas import json_normalize
 import requests
 import logging
 
+LOG = logging.getLogger("visitors-logger")
 
 
 WEATHER_URL='https://api.open-meteo.com/v1/forecast?latitude=47.0505&longitude=8.3064&current_weather=True'
@@ -52,16 +53,14 @@ class WeatherHelper:
 
     def invoke_weather_api(self):
         url = self._weather_uri
-        logging.debug(f'calling weather API using url {url}')    
+        LOG.info(f'invoking weather API using url {url}')    
         response = requests.get(url)
         response_json = response.json()
         df = json_normalize(response_json['current_weather'])
         return df
 
     def get_weather_desc(self, weather_code: int):
-        #the_code = int(weather_code)
-        #print(the_code)
-        #print(type(the_code))
+        LOG.debug(f':get weather description for code {weather_code}')
         return WEATHER_DESC.get(weather_code, 'UNDEFINED WEATHER CODE')
          
 
@@ -70,17 +69,10 @@ class VisitorHelper:
     def __init__(self, visitor_api_uri=VISITOR_API_URL):
        self._visitor_api_uri = visitor_api_uri 
 
-    '''
-    def invoke_weather_api(self):
-        url = self._weather_uri
-        response = requests.get(url)
-        response_json = response.json()
-        df = json_normalize(response_json['current_weather'])
-        return df
-    '''
     
     def invoke_visitor_api(self):
         url = self._visitor_api_uri
+        LOG.info(f'invoking visitors API with url: {url}')
         response = requests.get(url)
         response_json = response.json()
         df = json_normalize(response_json['data'])

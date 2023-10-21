@@ -1,30 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Oct 12 14:04:18 2023
+
+DBUitls is used to interact with the database.
+
 
 @author: pfox
 """
 
-import requests
-import pandas as pd
-from pandas import json_normalize
-import sched, time
-from pathlib import Path
+
 from datetime import datetime  
 import sqlalchemy as sa
 from sqlalchemy import create_engine
 from sqlalchemy import insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import DateTime
-import pandas as pd
 
-from sqlalchemy import MetaData
-from sqlalchemy import Integer, String, Column, Table
+from sqlalchemy import MetaData, Table
+
 
 from sqlalchemy import text
 import logging
-import sqlalchemy as sa
 
 LOG = logging.getLogger("visitors-logger")
 
@@ -44,7 +39,7 @@ class DBHelper:
        
        
     def _run_raw_sql(self,the_sql):
-         LOG.info(f'runing sql: {the_sql}')
+         LOG.debug(f'runing sql: {the_sql}')
          
          with self._engine.connect() as conn:
              sql = text(the_sql)       
@@ -119,6 +114,7 @@ class DBHelper:
         				 		  vi.time_dim_id = vi_stage.time_dim_id	)
         '''
         
+        LOG.debug('add stage table to f_visitor_frequenct')
         self._run_raw_sql(add_to_f_visitor_frequenct_sql)
         
 
@@ -136,7 +132,7 @@ class DBHelper:
         
 
     def update_star(self):
-        
+        LOG.info('update the star schema tables in DB')
         self.update_weather_dim_table()
         self.drop_f_vistor_frequency_STAGE_table()
         self.create_f_vistor_frequency_STAGE_table()
@@ -145,24 +141,25 @@ class DBHelper:
         self.truncate_visitors_table()
 
     def insert_data( self, df):
+        
+        LOG.info('inserting data to DB')
             
         metadata2=MetaData()
         with self._engine.connect() as conn:
             
-            LOG.info('Loading visitors_RAW from DB.')
+            LOG.debug('Loading visitors_RAW metaData from DB.')
             
             visitors_table=Table("visitors_raw",
                                 metadata2,
                                 autoload_with=conn)
         
-            print(visitors_table.c)
+            LOG.debug(f'column names loaded from DB: {visitors_table.c}')
             
             
             date_format = '%Y-%m-%d %H:%M:%S'               
             the_time = datetime.strptime('2023-09-30 17:10:55',date_format)   
             
             for index, row in df.iterrows():   
-                print( row['nodeid'] )
                 try:
                     stmt = insert(visitors_table).values(
                         nodeid=row['nodeid'], 
@@ -170,7 +167,6 @@ class DBHelper:
                         counter=row['counter'] , 
                         time= row['time'],
                         iso_time = datetime.strptime(row['ISO_time'],date_format),
-                        #iso_time =datetime(['ISO_time']),
                         ltr = row['ltr'] ,
                         rtl = row['rtl']  ,
                         temperature= row['temperature'] ,
@@ -178,18 +174,19 @@ class DBHelper:
                         weather_desc = row['weather_desc'],
                         weather_code= row['weather_code'] )
                     
-                    compiled = stmt.compile()
+                    
                     result = conn.execute(stmt)
                     conn.commit()
                 except IntegrityError as ex :
-                   print(ex)
+                   LOG.error(ex)
                    conn.rollback()
-                   print('CARRY ON!!!')
+                   LOG.info('Trying Next row!!')
                    
     def check_table(self):
-        print('check tables')    
+        LOG.debug('check tables')    
         engine = sa.create_engine(DATABASE_URI, echo=False)
         meta = sa.MetaData()
-        meta.reflect(engine, schema='visitors_schema')
-        print(meta.tables.keys())
+        meta.reflect(engine, schema=SCHEMA_NAME)
+        LOG.info('The table names retrieved from the schema:')
+        LOG.info(meta.tables.keys())
         
